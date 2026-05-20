@@ -20,6 +20,7 @@ import (
 func newAddCommand() *cobra.Command {
 	var feedURL string
 	var scrapeSelector string
+	var group string
 
 	cmd := &cobra.Command{
 		Use:   "add <name> <url>",
@@ -33,7 +34,7 @@ func newAddCommand() *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			_, err = controller.AddBlog(db, name, url, feedURL, scrapeSelector)
+			_, err = controller.AddBlog(db, name, url, feedURL, scrapeSelector, group)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -44,6 +45,7 @@ func newAddCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&feedURL, "feed-url", "", "RSS/Atom feed URL (auto-discovered if not provided)")
 	cmd.Flags().StringVar(&scrapeSelector, "scrape-selector", "", "CSS selector for HTML scraping fallback")
+	cmd.Flags().StringVar(&group, "group", "", "Group name for organizing blogs")
 	return cmd
 }
 
@@ -103,6 +105,9 @@ func newBlogsCommand() *cobra.Command {
 			for _, blog := range blogs {
 				color.New(color.FgWhite, color.Bold).Printf("  %s\n", blog.Name)
 				fmt.Printf("    URL: %s\n", blog.URL)
+				if blog.Group != "" {
+					fmt.Printf("    Group: %s\n", blog.Group)
+				}
 				if blog.FeedURL != "" {
 					fmt.Printf("    Feed: %s\n", blog.FeedURL)
 				}

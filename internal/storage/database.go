@@ -75,6 +75,7 @@ func (db *Database) init() error {
 			url TEXT NOT NULL UNIQUE,
 			feed_url TEXT,
 			scrape_selector TEXT,
+			group_name TEXT,
 			last_scanned TIMESTAMP
 		);
 		CREATE TABLE IF NOT EXISTS articles (
@@ -88,18 +89,38 @@ func (db *Database) init() error {
 			FOREIGN KEY (blog_id) REFERENCES blogs(id)
 		);
 	`
-	_, err := db.conn.Exec(schema)
-	return err
+	if _, err := db.conn.Exec(schema); err != nil {
+		return err
+	}
+	return db.migrate()
+}
+
+// migrate applies incremental schema changes to existing databases.
+func (db *Database) migrate() error {
+	// Add group_name column if it doesn't exist (migration for existing DBs).
+	var count int
+	err := db.conn.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('blogs') WHERE name = 'group_name'`).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		_, err = db.conn.Exec(`ALTER TABLE blogs ADD COLUMN group_name TEXT`)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (db *Database) AddBlog(blog model.Blog) (model.Blog, error) {
 	result, err := db.conn.Exec(
-		`INSERT INTO blogs (name, url, feed_url, scrape_selector, last_scanned)
-		VALUES (?, ?, ?, ?, ?)`,
+		`INSERT INTO blogs (name, url, feed_url, scrape_selector, group_name, last_scanned)
+		VALUES (?, ?, ?, ?, ?, ?)`,
 		blog.Name,
 		blog.URL,
 		nullIfEmpty(blog.FeedURL),
 		nullIfEmpty(blog.ScrapeSelector),
+		nullIfEmpty(blog.Group),
 		formatTimePtr(blog.LastScanned),
 	)
 	if err != nil {
@@ -114,22 +135,22 @@ func (db *Database) AddBlog(blog model.Blog) (model.Blog, error) {
 }
 
 func (db *Database) GetBlog(id int64) (*model.Blog, error) {
-	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE id = ?`, id)
+	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, group_name, last_scanned FROM blogs WHERE id = ?`, id)
 	return scanBlog(row)
 }
 
 func (db *Database) GetBlogByName(name string) (*model.Blog, error) {
-	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE name = ?`, name)
+	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, group_name, last_scanned FROM blogs WHERE name = ?`, name)
 	return scanBlog(row)
 }
 
 func (db *Database) GetBlogByURL(url string) (*model.Blog, error) {
-	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs WHERE url = ?`, url)
+	row := db.conn.QueryRow(`SELECT id, name, url, feed_url, scrape_selector, group_name, last_scanned FROM blogs WHERE url = ?`, url)
 	return scanBlog(row)
 }
 
 func (db *Database) ListBlogs() ([]model.Blog, error) {
-	rows, err := db.conn.Query(`SELECT id, name, url, feed_url, scrape_selector, last_scanned FROM blogs ORDER BY name`)
+	rows, err := db.conn.Query(`SELECT id, name, url, feed_url, scrape_selector, group_name, last_scanned FROM blogs ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +171,12 @@ func (db *Database) ListBlogs() ([]model.Blog, error) {
 
 func (db *Database) UpdateBlog(blog model.Blog) error {
 	_, err := db.conn.Exec(
-		`UPDATE blogs SET name = ?, url = ?, feed_url = ?, scrape_selector = ?, last_scanned = ? WHERE id = ?`,
+		`UPDATE blogs SET name = ?, url = ?, feed_url = ?, scrape_selector = ?, group_name = ?, last_scanned = ? WHERE id = ?`,
 		blog.Name,
 		blog.URL,
 		nullIfEmpty(blog.FeedURL),
 		nullIfEmpty(blog.ScrapeSelector),
+		nullIfEmpty(blog.Group),
 		formatTimePtr(blog.LastScanned),
 		blog.ID,
 	)
@@ -360,9 +382,10 @@ func scanBlog(scanner interface{ Scan(dest ...any) error }) (*model.Blog, error)
 		url            string
 		feedURL        sql.NullString
 		scrapeSelector sql.NullString
+		groupName      sql.NullString
 		lastScanned    sql.NullString
 	)
-	if err := scanner.Scan(&id, &name, &url, &feedURL, &scrapeSelector, &lastScanned); err != nil {
+	if err := scanner.Scan(&id, &name, &url, &feedURL, &scrapeSelector, &groupName, &lastScanned); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -375,6 +398,7 @@ func scanBlog(scanner interface{ Scan(dest ...any) error }) (*model.Blog, error)
 		URL:            url,
 		FeedURL:        feedURL.String,
 		ScrapeSelector: scrapeSelector.String,
+		Group:          groupName.String,
 	}
 	if lastScanned.Valid {
 		if parsed, err := parseTime(lastScanned.String); err == nil {
