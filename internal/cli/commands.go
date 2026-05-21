@@ -128,6 +128,7 @@ func newBlogsCommand() *cobra.Command {
 func newScanCommand() *cobra.Command {
 	var silent bool
 	var workers int
+	var group string
 
 	cmd := &cobra.Command{
 		Use:   "scan [blog_name]",
@@ -152,6 +153,37 @@ func newScanCommand() *cobra.Command {
 				}
 				if !silent {
 					printScanResult(*result)
+				}
+			} else if group != "" {
+				blogs, err := db.ListBlogsByGroup(group)
+				if err != nil {
+					return err
+				}
+				if len(blogs) == 0 {
+					fmt.Printf("No blogs found in group '%s'.\n", group)
+					return nil
+				}
+				if !silent {
+					color.New(color.FgCyan).Printf("Scanning %d blog(s) in group '%s'...\n\n", len(blogs), group)
+				}
+				results, err := scanner.ScanBlogsByGroup(db, group, workers)
+				if err != nil {
+					return err
+				}
+				totalNew := 0
+				for _, result := range results {
+					if !silent {
+						printScanResult(result)
+					}
+					totalNew += result.NewArticles
+				}
+				if !silent {
+					fmt.Println()
+					if totalNew > 0 {
+						color.New(color.FgGreen, color.Bold).Printf("Found %d new article(s) total!\n", totalNew)
+					} else {
+						color.New(color.FgYellow).Println("No new articles found.")
+					}
 				}
 			} else {
 				blogs, err := db.ListBlogs()
@@ -194,12 +226,14 @@ func newScanCommand() *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&silent, "silent", "s", false, "Only output 'scan done' when complete")
 	cmd.Flags().IntVarP(&workers, "workers", "w", 8, "Number of concurrent workers when scanning all blogs")
+	cmd.Flags().StringVarP(&group, "group", "g", "", "Only scan blogs in this group")
 	return cmd
 }
 
 func newArticlesCommand() *cobra.Command {
 	var showAll bool
 	var blogName string
+	var group string
 
 	cmd := &cobra.Command{
 		Use:   "articles",
@@ -210,7 +244,7 @@ func newArticlesCommand() *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			articles, blogNames, err := controller.GetArticles(db, showAll, blogName)
+			articles, blogNames, err := controller.GetArticles(db, showAll, blogName, group)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -238,6 +272,7 @@ func newArticlesCommand() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Show all articles (including read)")
 	cmd.Flags().StringVarP(&blogName, "blog", "b", "", "Filter by blog name")
+	cmd.Flags().StringVarP(&group, "group", "g", "", "Filter by blog group")
 	return cmd
 }
 
@@ -286,7 +321,7 @@ func newReadAllCommand() *cobra.Command {
 			}
 			defer db.Close()
 
-			articles, blogNames, err := controller.GetArticles(db, false, blogName)
+			articles, blogNames, err := controller.GetArticles(db, false, blogName, "")
 			if err != nil {
 				printError(err)
 				return markError(err)

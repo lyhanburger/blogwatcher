@@ -31,6 +31,15 @@ description: Use when managing or interacting with favorite blogs via the BlogWa
   ```
 - The group is stored in the `group_name` column and displayed in `blogwatcher blogs` output.
 - `model.Blog.Group` (string) maps to the `group_name` column; empty string means no group.
+- `db.ListBlogsByGroup(group)` in `internal/storage/database.go` returns blogs filtered by group.
+- `scanner.ScanBlogsByGroup(db, group, workers)` in `internal/scanner/scanner.go` scans only blogs in the group.
+
+### Group-aware commands
+| Command | Flag | Behavior |
+|---|---|---|
+| `blogwatcher add <name> <url>` | `--group` | Assign blog to a group |
+| `blogwatcher articles` | `--group` / `-g` | Show articles from all blogs in the group |
+| `blogwatcher scan` | `--group` / `-g` | Scan only blogs in the group |
 
 ## Test Guidance
 - Run tests with `go test ./...`.

@@ -172,6 +172,59 @@ func ScanBlogByName(db *storage.Database, name string) (*ScanResult, error) {
 	return &result, nil
 }
 
+func ScanBlogsByGroup(db *storage.Database, group string, workers int) ([]ScanResult, error) {
+	blogs, err := db.ListBlogsByGroup(group)
+	if err != nil {
+		return nil, err
+	}
+	if len(blogs) == 0 {
+		return []ScanResult{}, nil
+	}
+	if workers <= 1 {
+		results := make([]ScanResult, 0, len(blogs))
+		for _, blog := range blogs {
+			results = append(results, ScanBlog(db, blog))
+		}
+		return results, nil
+	}
+
+	type job struct {
+		Index int
+		Blog  model.Blog
+	}
+	jobs := make(chan job)
+	results := make([]ScanResult, len(blogs))
+	errs := make(chan error, workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			workerDB, err := storage.OpenDatabase(db.Path())
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer workerDB.Close()
+			for item := range jobs {
+				results[item.Index] = ScanBlog(workerDB, item.Blog)
+			}
+			errs <- nil
+		}()
+	}
+
+	for index, blog := range blogs {
+		jobs <- job{Index: index, Blog: blog}
+	}
+	close(jobs)
+
+	for i := 0; i < workers; i++ {
+		if err := <-errs; err != nil {
+			return nil, err
+		}
+	}
+
+	return results, nil
+}
+
 func convertFeedArticles(blogID int64, articles []rss.FeedArticle) []model.Article {
 	result := make([]model.Article, 0, len(articles))
 	for _, article := range articles {

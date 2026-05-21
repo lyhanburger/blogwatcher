@@ -169,6 +169,29 @@ func (db *Database) ListBlogs() ([]model.Blog, error) {
 	return blogs, rows.Err()
 }
 
+func (db *Database) ListBlogsByGroup(group string) ([]model.Blog, error) {
+	rows, err := db.conn.Query(
+		`SELECT id, name, url, feed_url, scrape_selector, group_name, last_scanned FROM blogs WHERE group_name = ? ORDER BY name`,
+		group,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var blogs []model.Blog
+	for rows.Next() {
+		blog, err := scanBlog(rows)
+		if err != nil {
+			return nil, err
+		}
+		if blog != nil {
+			blogs = append(blogs, *blog)
+		}
+	}
+	return blogs, rows.Err()
+}
+
 func (db *Database) UpdateBlog(blog model.Blog) error {
 	_, err := db.conn.Exec(
 		`UPDATE blogs SET name = ?, url = ?, feed_url = ?, scrape_selector = ?, group_name = ?, last_scanned = ? WHERE id = ?`,
