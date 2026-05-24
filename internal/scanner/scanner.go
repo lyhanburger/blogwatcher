@@ -115,49 +115,7 @@ func ScanAllBlogs(db *storage.Database, workers int) ([]ScanResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if workers <= 1 {
-		results := make([]ScanResult, 0, len(blogs))
-		for _, blog := range blogs {
-			results = append(results, ScanBlog(db, blog))
-		}
-		return results, nil
-	}
-
-	type job struct {
-		Index int
-		Blog  model.Blog
-	}
-	jobs := make(chan job)
-	results := make([]ScanResult, len(blogs))
-	errs := make(chan error, workers)
-
-	for i := 0; i < workers; i++ {
-		go func() {
-			workerDB, err := storage.OpenDatabase(db.Path())
-			if err != nil {
-				errs <- err
-				return
-			}
-			defer workerDB.Close()
-			for item := range jobs {
-				results[item.Index] = ScanBlog(workerDB, item.Blog)
-			}
-			errs <- nil
-		}()
-	}
-
-	for index, blog := range blogs {
-		jobs <- job{Index: index, Blog: blog}
-	}
-	close(jobs)
-
-	for i := 0; i < workers; i++ {
-		if err := <-errs; err != nil {
-			return nil, err
-		}
-	}
-
-	return results, nil
+	return scanBlogs(db, blogs, workers)
 }
 
 func ScanBlogByName(db *storage.Database, name string) (*ScanResult, error) {
@@ -177,9 +135,16 @@ func ScanBlogsByGroup(db *storage.Database, group string, workers int) ([]ScanRe
 	if err != nil {
 		return nil, err
 	}
+	return scanBlogs(db, blogs, workers)
+}
+
+// scanBlogs runs ScanBlog for each blog, using a worker pool when workers > 1.
+// Workers are capped at len(blogs) to avoid idle goroutines.
+func scanBlogs(db *storage.Database, blogs []model.Blog, workers int) ([]ScanResult, error) {
 	if len(blogs) == 0 {
 		return []ScanResult{}, nil
 	}
+
 	if workers <= 1 {
 		results := make([]ScanResult, 0, len(blogs))
 		for _, blog := range blogs {
@@ -188,26 +153,45 @@ func ScanBlogsByGroup(db *storage.Database, group string, workers int) ([]ScanRe
 		return results, nil
 	}
 
+	// Cap workers to avoid spinning up more goroutines than blogs.
+	if workers > len(blogs) {
+		workers = len(blogs)
+	}
+
+	// Open all worker DB connections upfront so a connection failure doesn't
+	// deadlock the jobs channel.
+	workerDBs := make([]*storage.Database, workers)
+	for i := range workerDBs {
+		wdb, err := storage.OpenDatabase(db.Path())
+		if err != nil {
+			for j := 0; j < i; j++ {
+				workerDBs[j].Close()
+			}
+			return nil, err
+		}
+		workerDBs[i] = wdb
+	}
+	defer func() {
+		for _, wdb := range workerDBs {
+			wdb.Close()
+		}
+	}()
+
 	type job struct {
 		Index int
 		Blog  model.Blog
 	}
-	jobs := make(chan job)
+	jobs := make(chan job, len(blogs))
 	results := make([]ScanResult, len(blogs))
-	errs := make(chan error, workers)
+	done := make(chan struct{}, workers)
 
-	for i := 0; i < workers; i++ {
+	for _, wdb := range workerDBs {
+		wdb := wdb
 		go func() {
-			workerDB, err := storage.OpenDatabase(db.Path())
-			if err != nil {
-				errs <- err
-				return
-			}
-			defer workerDB.Close()
 			for item := range jobs {
-				results[item.Index] = ScanBlog(workerDB, item.Blog)
+				results[item.Index] = ScanBlog(wdb, item.Blog)
 			}
-			errs <- nil
+			done <- struct{}{}
 		}()
 	}
 
@@ -217,9 +201,7 @@ func ScanBlogsByGroup(db *storage.Database, group string, workers int) ([]ScanRe
 	close(jobs)
 
 	for i := 0; i < workers; i++ {
-		if err := <-errs; err != nil {
-			return nil, err
-		}
+		<-done
 	}
 
 	return results, nil
