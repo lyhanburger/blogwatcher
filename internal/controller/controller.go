@@ -66,15 +66,15 @@ func RemoveBlog(db *storage.Database, name string) error {
 	return err
 }
 
-func GetArticles(db *storage.Database, showAll bool, blogName string, group string) ([]model.Article, map[int64]string, error) {
+func GetArticles(db *storage.Database, showAll bool, blogName string, group string) ([]model.Article, map[int64]string, map[int64]string, error) {
 	var blogID *int64
 	if blogName != "" {
 		blog, err := db.GetBlogByName(blogName)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if blog == nil {
-			return nil, nil, BlogNotFoundError{Name: blogName}
+			return nil, nil, nil, BlogNotFoundError{Name: blogName}
 		}
 		blogID = &blog.ID
 	}
@@ -84,13 +84,13 @@ func GetArticles(db *storage.Database, showAll bool, blogName string, group stri
 		// Filter by group: collect articles for all blogs in the group.
 		groupBlogs, err := db.ListBlogsByGroup(group)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		for _, b := range groupBlogs {
 			bid := b.ID
 			arts, err := db.ListArticles(!showAll, &bid)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			articles = append(articles, arts...)
 		}
@@ -98,20 +98,22 @@ func GetArticles(db *storage.Database, showAll bool, blogName string, group stri
 		var err error
 		articles, err = db.ListArticles(!showAll, blogID)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
 	blogs, err := db.ListBlogs()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	blogNames := make(map[int64]string)
+	blogGroups := make(map[int64]string)
 	for _, blog := range blogs {
 		blogNames[blog.ID] = blog.Name
+		blogGroups[blog.ID] = blog.Group
 	}
 
-	return articles, blogNames, nil
+	return articles, blogNames, blogGroups, nil
 }
 
 func MarkArticleRead(db *storage.Database, articleID int64) (model.Article, error) {

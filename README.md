@@ -87,6 +87,18 @@ blogwatcher articles --blog "Tech Blog"
 blogwatcher articles --group "tech"
 ```
 
+Each article shows its blog name and group (if assigned):
+
+```
+Unread articles (2):
+
+  [12] [new] Understanding Click Contexts
+       Blog: Real Python
+       Group: tech
+       URL: https://realpython.com/click-context/
+       Published: 2025-11-02
+```
+
 ### Managing Read Status
 
 ```bash

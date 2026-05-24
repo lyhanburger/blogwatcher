@@ -244,7 +244,7 @@ func newArticlesCommand() *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			articles, blogNames, err := controller.GetArticles(db, showAll, blogName, group)
+			articles, blogNames, blogGroups, err := controller.GetArticles(db, showAll, blogName, group)
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -264,7 +264,7 @@ func newArticlesCommand() *cobra.Command {
 			}
 			color.New(color.FgCyan, color.Bold).Printf("%s (%d):\n\n", label, len(articles))
 			for _, article := range articles {
-				printArticle(article, blogNames[article.BlogID])
+				printArticle(article, blogNames[article.BlogID], blogGroups[article.BlogID])
 			}
 			return nil
 		},
@@ -293,7 +293,7 @@ func newReadCommand() *cobra.Command {
 				}
 				defer db.Close()
 
-				articles, blogNames, err := controller.GetArticles(db, false, blogName, "")
+				articles, blogNames, _, err := controller.GetArticles(db, false, blogName, "")
 				if err != nil {
 					printError(err)
 					return markError(err)
@@ -370,7 +370,7 @@ func newReadAllCommand() *cobra.Command {
 			}
 			defer db.Close()
 
-			articles, blogNames, err := controller.GetArticles(db, false, blogName, "")
+			articles, blogNames, _, err := controller.GetArticles(db, false, blogName, "")
 			if err != nil {
 				printError(err)
 				return markError(err)
@@ -464,7 +464,7 @@ func printScanResult(result scanner.ScanResult) {
 	color.New(statusColor).Printf("New: %d\n", result.NewArticles)
 }
 
-func printArticle(article model.Article, blogName string) {
+func printArticle(article model.Article, blogName string, groupName string) {
 	status := color.New(color.FgYellow).Sprint("[new]")
 	if article.IsRead {
 		status = color.New(color.FgHiBlack).Sprint("[read]")
@@ -472,6 +472,9 @@ func printArticle(article model.Article, blogName string) {
 	idStr := color.New(color.FgCyan).Sprintf("[%d]", article.ID)
 	fmt.Printf("  %s %s %s\n", idStr, status, article.Title)
 	fmt.Printf("       Blog: %s\n", blogName)
+	if groupName != "" {
+		fmt.Printf("       Group: %s\n", groupName)
+	}
 	fmt.Printf("       URL: %s\n", article.URL)
 	if article.PublishedDate != nil {
 		fmt.Printf("       Published: %s\n", article.PublishedDate.Format("2006-01-02"))
