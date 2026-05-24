@@ -277,11 +277,57 @@ func newArticlesCommand() *cobra.Command {
 }
 
 func newReadCommand() *cobra.Command {
+	var markAll bool
+	var blogName string
+	var yes bool
+
 	cmd := &cobra.Command{
-		Use:   "read <article_id>",
-		Short: "Mark an article as read.",
-		Args:  cobra.ExactArgs(1),
+		Use:   "read [article_id]",
+		Short: "Mark an article (or all unread articles) as read.",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if markAll {
+				db, err := storage.OpenDatabase("")
+				if err != nil {
+					return err
+				}
+				defer db.Close()
+
+				articles, blogNames, err := controller.GetArticles(db, false, blogName, "")
+				if err != nil {
+					printError(err)
+					return markError(err)
+				}
+				if len(articles) == 0 {
+					color.New(color.FgGreen).Println("No unread articles to mark as read.")
+					return nil
+				}
+				if !yes {
+					scope := "all blogs"
+					if blogName != "" {
+						scope = fmt.Sprintf("from '%s'", blogName)
+					}
+					confirmed, err := confirm(fmt.Sprintf("Mark %d article(s) %s as read?", len(articles), scope))
+					if err != nil {
+						return err
+					}
+					if !confirmed {
+						return nil
+					}
+				}
+				_ = blogNames
+				marked, err := controller.MarkAllArticlesRead(db, blogName)
+				if err != nil {
+					printError(err)
+					return markError(err)
+				}
+				color.New(color.FgGreen).Printf("Marked %d article(s) as read\n", len(marked))
+				return nil
+			}
+
+			if len(args) == 0 {
+				return fmt.Errorf("article_id is required unless --all is specified")
+			}
 			articleID, err := parseID(args[0])
 			if err != nil {
 				return err
@@ -304,6 +350,9 @@ func newReadCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&markAll, "all", "a", false, "Mark all unread articles as read")
+	cmd.Flags().StringVarP(&blogName, "blog", "b", "", "Only mark articles from this blog (used with --all)")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt (used with --all)")
 	return cmd
 }
 

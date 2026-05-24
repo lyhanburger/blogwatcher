@@ -8,6 +8,7 @@ A Go CLI tool to track blog articles, detect new posts, and manage read/unread s
 -   **Automatic Feed Discovery** - Detects RSS/Atom URLs from blog homepages
 -   **Read/Unread Management** - Track which articles you've read
 -   **Blog Filtering** - View articles from specific blogs
+-   **Blog Grouping** - Organize blogs into named groups
 -   **Duplicate Prevention** - Never tracks the same article twice
 -   **Colored CLI Output** - User-friendly terminal interface
 
@@ -39,6 +40,9 @@ blogwatcher add "Tech Blog" https://techblog.com --feed-url https://techblog.com
 
 # Add with HTML scraping selector (for blogs without feeds)
 blogwatcher add "No-RSS Blog" https://norss.com --scrape-selector "article h2 a"
+
+# Add a blog and assign it to a group
+blogwatcher add "Tech Blog" https://techblog.com --group "tech"
 ```
 
 ### Managing Blogs
@@ -62,6 +66,9 @@ blogwatcher scan
 
 # Scan a specific blog
 blogwatcher scan "Tech Blog"
+
+# Scan only blogs in a group
+blogwatcher scan --group "tech"
 ```
 
 ### Viewing Articles
@@ -75,6 +82,9 @@ blogwatcher articles --all
 
 # List articles from a specific blog
 blogwatcher articles --blog "Tech Blog"
+
+# List articles from all blogs in a group
+blogwatcher articles --group "tech"
 ```
 
 ### Managing Read Status
@@ -83,10 +93,19 @@ blogwatcher articles --blog "Tech Blog"
 # Mark an article as read (use article ID from articles list)
 blogwatcher read 42
 
+# Mark all unread articles as read
+blogwatcher read --all
+
+# Mark all unread articles from a specific blog as read
+blogwatcher read --all --blog "Tech Blog"
+
+# Skip confirmation prompt
+blogwatcher read --all --yes
+
 # Mark an article as unread
 blogwatcher unread 42
 
-# Mark all unread articles as read
+# Mark all unread articles as read (legacy command)
 blogwatcher read-all
 
 # Mark all unread articles as read for a blog (skip prompt)
@@ -125,7 +144,7 @@ When RSS isn't available, provide a CSS selector that matches article links:
 
 BlogWatcher stores data in SQLite at `~/.blogwatcher/blogwatcher.db`:
 
--   **blogs** - Tracked blogs (name, URL, feed URL, scrape selector)
+-   **blogs** - Tracked blogs (name, URL, feed URL, scrape selector, group)
 -   **articles** - Discovered articles (title, URL, dates, read status)
 
 ## Development

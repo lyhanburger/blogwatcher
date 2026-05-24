@@ -41,6 +41,13 @@ description: Use when managing or interacting with favorite blogs via the BlogWa
 | `blogwatcher articles` | `--group` / `-g` | Show articles from all blogs in the group |
 | `blogwatcher scan` | `--group` / `-g` | Scan only blogs in the group |
 
+## Read Command
+- `blogwatcher read <id>` — mark a single article as read
+- `blogwatcher read --all` — mark all unread articles as read (no article_id required)
+  - `--blog` / `-b`: limit to a specific blog
+  - `--yes` / `-y`: skip confirmation prompt
+- `read-all` is a legacy alias with the same behavior as `read --all`
+
 ## Test Guidance
 - Run tests with `go test ./...`.
 - If you add a feature, add tests and any necessary dummy data.
