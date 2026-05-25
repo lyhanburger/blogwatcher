@@ -177,3 +177,50 @@ func MarkArticleUnread(db *storage.Database, articleID int64) (model.Article, er
 	}
 	return *article, nil
 }
+
+func MarkAllArticlesUnread(db *storage.Database, blogName string, group string) ([]model.Article, error) {
+	var articles []model.Article
+
+	if group != "" && blogName == "" {
+		groupBlogs, err := db.ListBlogsByGroup(group)
+		if err != nil {
+			return nil, err
+		}
+		for _, b := range groupBlogs {
+			bid := b.ID
+			arts, err := db.ListArticles(false, &bid)
+			if err != nil {
+				return nil, err
+			}
+			articles = append(articles, arts...)
+		}
+	} else {
+		var blogID *int64
+		if blogName != "" {
+			blog, err := db.GetBlogByName(blogName)
+			if err != nil {
+				return nil, err
+			}
+			if blog == nil {
+				return nil, BlogNotFoundError{Name: blogName}
+			}
+			blogID = &blog.ID
+		}
+		var err error
+		articles, err = db.ListArticles(false, blogID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, article := range articles {
+		if article.IsRead {
+			_, err := db.MarkArticleUnread(article.ID)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return articles, nil
+}

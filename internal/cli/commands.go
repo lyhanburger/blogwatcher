@@ -412,11 +412,51 @@ func newReadAllCommand() *cobra.Command {
 }
 
 func newUnreadCommand() *cobra.Command {
+	var markAll bool
+	var blogName string
+	var group string
+	var yes bool
+
 	cmd := &cobra.Command{
-		Use:   "unread <article_id>",
-		Short: "Mark an article as unread.",
-		Args:  cobra.ExactArgs(1),
+		Use:   "unread [article_id]",
+		Short: "Mark an article (or all read articles) as unread.",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if markAll {
+				db, err := storage.OpenDatabase("")
+				if err != nil {
+					return err
+				}
+				defer db.Close()
+
+				if !yes {
+					scope := "all blogs"
+					if group != "" {
+						scope = fmt.Sprintf("in group '%s'", group)
+					} else if blogName != "" {
+						scope = fmt.Sprintf("from '%s'", blogName)
+					}
+					confirmed, err := confirm(fmt.Sprintf("Mark all read articles %s as unread?", scope))
+					if err != nil {
+						return err
+					}
+					if !confirmed {
+						return nil
+					}
+				}
+
+				marked, err := controller.MarkAllArticlesUnread(db, blogName, group)
+				if err != nil {
+					printError(err)
+					return markError(err)
+				}
+				color.New(color.FgGreen).Printf("Marked %d article(s) as unread\n", len(marked))
+				return nil
+			}
+
+			if len(args) == 0 {
+				return fmt.Errorf("article_id is required unless --all is specified")
+			}
 			articleID, err := parseID(args[0])
 			if err != nil {
 				return err
@@ -439,6 +479,10 @@ func newUnreadCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&markAll, "all", "a", false, "Mark all read articles as unread")
+	cmd.Flags().StringVarP(&blogName, "blog", "b", "", "Only mark articles from this blog (used with --all)")
+	cmd.Flags().StringVarP(&group, "group", "g", "", "Only mark articles in this group (used with --all)")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt (used with --all)")
 	return cmd
 }
 
